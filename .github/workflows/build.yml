@@ -21,41 +21,50 @@ jobs:
 
       - name: Clone edk2 and prepare BaseTools
         run: |
+          set -euxo pipefail
           git clone https://github.com/tianocore/edk2.git edk2
           cd edk2
           git submodule update --init --recursive
           make -C BaseTools
-          # ensure a usable tools_def file
           cp -n BaseTools/Conf/tools_def.template Conf/tools_def.txt || true
 
       - name: Copy payload into edk2 tree
         run: |
+          set -euxo pipefail
           rm -rf edk2/MyPayload
           mkdir -p edk2/MyPayload
-          cp -r src/* edk2/MyPayload/
+          if [ -d src ]; then
+            cp -r src/* edk2/MyPayload/
+          else
+            echo "Warning: src/ not found — nothing to copy"
+          fi
 
       - name: Register INF in MdeModulePkg.dsc (idempotent)
         run: |
+          set -euxo pipefail
           cd edk2
-          # Insert the INF line immediately after the [Components] header if not present
           if ! grep -q "MyPayload/MyPayload.inf" MdeModulePkg/MdeModulePkg.dsc; then
             awk '/^
 
 \[Components\]
 
 /{print; print "  ../MyPayload/MyPayload.inf"; next}1' MdeModulePkg/MdeModulePkg.dsc > /tmp/MdeModulePkg.dsc.tmp && mv /tmp/MdeModulePkg.dsc.tmp MdeModulePkg/MdeModulePkg.dsc
+          else
+            echo "MyPayload.inf already registered in MdeModulePkg.dsc"
           fi
 
       - name: Configure target and toolchain, source env, build
         shell: bash -l {0}
         run: |
+          set -euxo pipefail
           cd edk2
           mkdir -p Conf
-          echo "ACTIVE_PLATFORM = MdeModulePkg/MdeModulePkg.dsc" > Conf/target.txt
-          echo "TARGET = RELEASE" >> Conf/target.txt
-          echo "TOOL_CHAIN_TAG = GCC5" >> Conf/target.txt
-          echo "ARCH = X64" >> Conf/target.txt
-          # prepare environment and run build
+          cat > Conf/target.txt <<'EOF'
+ACTIVE_PLATFORM = MdeModulePkg/MdeModulePkg.dsc
+TARGET = RELEASE
+TOOL_CHAIN_TAG = GCC5
+ARCH = X64
+EOF
           . ./edksetup.sh
           build -p MdeModulePkg/MdeModulePkg.dsc -a X64 -b RELEASE -t GCC5
 
