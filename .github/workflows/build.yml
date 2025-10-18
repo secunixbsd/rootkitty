@@ -1,0 +1,57 @@
+name: build-uefi
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential uuid-dev iasl nasm python3 python3-distutils git
+
+      - name: Clone edk2 (shallow)
+        run: |
+          git clone --depth 1 https://github.com/tianocore/edk2.git edk2
+          cd edk2
+          git submodule update --init --depth 1
+
+      - name: Build BaseTools
+        run: |
+          cd edk2
+          make -C BaseTools
+
+      - name: Copy payload into edk2 tree
+        run: |
+          mkdir -p edk2/MyPayload
+          cp -r src/* edk2/MyPayload/
+
+      - name: Register component in dsc if missing
+        run: |
+          cd edk2
+          if ! grep -q "MyPayload.inf" MdeModulePkg/MdeModulePkg.dsc; then
+            awk '/^
+
+\[Components\]
+
+/{print; print "  ../MyPayload/MyPayload.inf"; next}1' MdeModulePkg/MdeModulePkg.dsc > /tmp/dsc.tmp && mv /tmp/dsc.tmp MdeModulePkg/MdeModulePkg.dsc
+          fi
+
+      - name: Source environment and build
+        shell: bash -l {0}
+        run: |
+          cd edk2
+          . ./edksetup.sh
+          build -p MdeModulePkg/MdeModulePkg.dsc -a X64 -b RELEASE || true
+
+      - name: Upload built .efi artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyPayload-efi
+          path: edk2/Build/**/X64/*.efi
