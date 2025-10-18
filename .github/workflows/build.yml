@@ -22,6 +22,7 @@ jobs:
           cd edk2
           git submodule update --init
           make -C BaseTools
+          cp BaseTools/Conf/tools_def.template Conf/tools_def.txt
 
       - name: Copy payload into edk2 tree
         run: |
