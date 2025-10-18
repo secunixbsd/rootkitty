@@ -35,8 +35,7 @@ jobs:
 
 \[Components\]
 
-/{print; print "  ../MyPayload/MyPayload.inf"; next}1' \
-            MdeModulePkg/MdeModulePkg.dsc > tmp && mv tmp MdeModulePkg/MdeModulePkg.dsc
+/{print; print "  ../MyPayload/MyPayload.inf"; next}1' MdeModulePkg/MdeModulePkg.dsc > tmp && mv tmp MdeModulePkg/MdeModulePkg.dsc
 
       - name: Set toolchain and build
         run: |
