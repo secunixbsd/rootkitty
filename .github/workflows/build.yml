@@ -8,47 +8,59 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
+      - name: Checkout repo (full)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
 
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y build-essential uuid-dev iasl nasm python3 python3-distutils git
+          sudo apt install -y build-essential uuid-dev iasl nasm python3 python3-distutils git python3-pip
 
-      - name: Clone EDK II
+      - name: Clone edk2 and prepare BaseTools
         run: |
-          git clone https://github.com/tianocore/edk2.git
+          git clone https://github.com/tianocore/edk2.git edk2
           cd edk2
-          git submodule update --init
+          git submodule update --init --recursive
           make -C BaseTools
-          cp BaseTools/Conf/tools_def.template Conf/tools_def.txt
+          # ensure a usable tools_def file
+          cp -n BaseTools/Conf/tools_def.template Conf/tools_def.txt || true
 
       - name: Copy payload into edk2 tree
         run: |
-          cp -r src edk2/MyPayload
+          rm -rf edk2/MyPayload
+          mkdir -p edk2/MyPayload
+          cp -r src/* edk2/MyPayload/
 
-      - name: Register INF in DSC
+      - name: Register INF in MdeModulePkg.dsc (idempotent)
         run: |
           cd edk2
-          awk '/^
+          # Insert the INF line immediately after the [Components] header if not present
+          if ! grep -q "MyPayload/MyPayload.inf" MdeModulePkg/MdeModulePkg.dsc; then
+            awk '/^
 
 \[Components\]
 
-/{print; print "  ../MyPayload/MyPayload.inf"; next}1' MdeModulePkg/MdeModulePkg.dsc > tmp && mv tmp MdeModulePkg/MdeModulePkg.dsc
+/{print; print "  ../MyPayload/MyPayload.inf"; next}1' MdeModulePkg/MdeModulePkg.dsc > /tmp/MdeModulePkg.dsc.tmp && mv /tmp/MdeModulePkg.dsc.tmp MdeModulePkg/MdeModulePkg.dsc
+          fi
 
-      - name: Set toolchain and build
+      - name: Configure target and toolchain, source env, build
+        shell: bash -l {0}
         run: |
           cd edk2
+          mkdir -p Conf
           echo "ACTIVE_PLATFORM = MdeModulePkg/MdeModulePkg.dsc" > Conf/target.txt
           echo "TARGET = RELEASE" >> Conf/target.txt
           echo "TOOL_CHAIN_TAG = GCC5" >> Conf/target.txt
           echo "ARCH = X64" >> Conf/target.txt
+          # prepare environment and run build
           . ./edksetup.sh
-          build
+          build -p MdeModulePkg/MdeModulePkg.dsc -a X64 -b RELEASE -t GCC5
 
       - name: Upload .efi artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MyPayload.efi
+          name: MyPayload-efi
           path: edk2/Build/**/X64/*.efi
