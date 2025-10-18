@@ -37,11 +37,15 @@ jobs:
 /{print; print "  ../MyPayload/MyPayload.inf"; next}1' \
             MdeModulePkg/MdeModulePkg.dsc > tmp && mv tmp MdeModulePkg/MdeModulePkg.dsc
 
-      - name: Build payload
+      - name: Set toolchain and build
         run: |
           cd edk2
-          source edksetup.sh
-          build -p MdeModulePkg/MdeModulePkg.dsc -a X64 -b RELEASE -t GCC5
+          echo "ACTIVE_PLATFORM = MdeModulePkg/MdeModulePkg.dsc" > Conf/target.txt
+          echo "TARGET = RELEASE" >> Conf/target.txt
+          echo "TOOL_CHAIN_TAG = GCC5" >> Conf/target.txt
+          echo "ARCH = X64" >> Conf/target.txt
+          . ./edksetup.sh
+          build
 
       - name: Upload .efi artifact
         uses: actions/upload-artifact@v4
